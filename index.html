@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Daily Puzzle</title>
+<style>
+  :root { --bg: #f6f1e7; --ink: #2b2d42; --dim: #8d8a99; --card: #fffdf8; --accent: #ef6f6c; --good: #3bb273; --line: #d9d2c3; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; user-select: none; -webkit-user-select: none; }
+  #app { height: 100%; display: flex; flex-direction: column; max-width: 980px; margin: 0 auto; padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); box-sizing: border-box; gap: 8px; }
+  header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; } header small { color: var(--dim); font-weight: 600; }
+  #streak { font-weight: 800; color: var(--accent); }
+  #clock { margin-left: auto; font: 800 20px ui-monospace, "SF Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
+  #name { width: 120px; height: 36px; border-radius: 10px; border: 2px solid var(--line); background: #fff; padding: 0 8px; font: 15px system-ui, sans-serif; color: var(--ink); }
+  #banner { background: var(--ink); color: #fff; border-radius: 10px; padding: 6px 12px; font-weight: 700; text-align: center; }
+  #banner:empty { display: none; }
+  main { flex: 1; min-height: 0; display: flex; gap: 14px; }
+  #left { flex: 1.4; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  #board { flex: 1; min-height: 0; width: 100%; touch-action: none; display: block; }
+  .tools { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  button { min-height: 44px; min-width: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: #fff; color: var(--ink); font: 700 15px system-ui, sans-serif; cursor: pointer; box-shadow: 0 3px 0 #0000001f; }
+  button:active { transform: translateY(2px); box-shadow: 0 1px 0 #0000001f; }
+  button.on { background: var(--ink); color: #fff; } button.primary { background: var(--accent); color: #fff; }
+  #side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; overflow: auto; }
+  #side h2 { margin: 4px 0 2px; font-size: 14px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .who { display: grid; grid-template-columns: 12px 1fr auto; gap: 4px 8px; align-items: center; background: var(--card); border-radius: 12px; padding: 7px 10px; box-shadow: 0 1px 0 #0000000f; }
+  .who i { width: 12px; height: 12px; border-radius: 50%; } .who b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .who span { font: 700 13px ui-monospace, Consolas, monospace; color: var(--dim); }
+  .who.me { box-shadow: inset 0 0 0 2px var(--accent); } .who.done span { color: var(--good); }
+  .bar { grid-column: 2 / 4; height: 7px; border-radius: 4px; background: #ece5d6; overflow: hidden; } .bar u { display: block; height: 100%; border-radius: 4px; transition: width .4s; }
+  #net { font-size: 12px; color: var(--dim); text-align: center; }
+  #toast { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 8px 14px; border-radius: 10px; font-weight: 700; opacity: 0; transition: opacity .3s; pointer-events: none; white-space: nowrap; }
+  #dlg { position: fixed; inset: 0; display: grid; place-items: center; background: #2b2d4255; }
+  #dlg[hidden] { display: none; }
+  .card { width: min(380px, 90vw); max-height: 84vh; overflow: auto; padding: 20px; border-radius: 18px; background: var(--card); box-sizing: border-box; box-shadow: 0 12px 40px #0003; text-align: center; }
+  .card h2 { margin: 0 0 4px; font-size: 24px; } .card .big { font: 800 36px ui-monospace, Consolas, monospace; margin: 4px 0; }
+  .card h3 { margin: 14px 0 4px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
+  .card ol { text-align: left; margin: 0; padding-left: 24px; font-size: 14px; } .card li span { float: right; font-family: ui-monospace, Consolas, monospace; }
+  .card p { margin: 8px 0; color: var(--dim); } .row { display: flex; gap: 8px; margin-top: 14px; } .row > * { flex: 1; }
+  @media (max-width: 640px) { main { flex-direction: column; } #side { flex: none; max-height: 30vh; } #name { width: 96px; } header h1 { font-size: 18px; } }
+</style>
+<script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
+</head>
+<body>
+<div id="app">
+  <header><h1 id="title">Daily Puzzle</h1><small id="date"></small><span id="streak"></span><span id="clock">0:00</span><input id="name" maxlength="16" placeholder="Your name" aria-label="Your name"></header>
+  <div id="banner"></div>
+  <main>
+    <div id="left">
+      <canvas id="board"></canvas>
+      <div class="tools"><button id="fill" class="on">■ Fill</button><button id="mark">✕ Mark</button><button id="practice">Practice</button></div>
+    </div>
+    <div id="side"><h2>Today in this room</h2><div id="list"></div><div id="net">Connecting…</div></div>
+  </main>
+</div>
+<div id="toast"></div>
+<div id="dlg" hidden><div class="card" id="card"></div></div>
+<script>
+/* ═══ DAILY PUZZLE · a Multiplayer Agent starter ════════════════════════════════════════
+ * One new picture puzzle a day, the same for everyone. Beat your friends' time. Versus, 1+.
+ *
+ * WHERE THINGS ARE (search for the "── " headers):
+ *   CONFIG ........ puzzle size, how full the picture is, ghosts, saves
+ *   CONNECTION .... MP_CONNECT, joining, the offline room, who is host
+ *   PUZZLE ........ make today's puzzle from the date, check it has one logical solution
+ *   BOARD ......... drawing the grid and clues, tapping and dragging, solving
+ *   DAY & SAVES ... the UTC day, your streak (player save), today's leaderboard
+ *   ROOM .......... everyone's live progress, and the ghost solvers (host)
+ *   SCREENS ....... header, the room list, the solved card
+ *   MAIN LOOP ..... timers, the live ops banner, the day rolling over
+ *
+ * HOW THE MULTIPLAYER WORKS (a relay room: no server code):
+ *   - The puzzle comes from the UTC date (a seeded PRNG), so everyone in the world gets the
+ *     same one without anything in state.
+ *   - Each player writes its OWN entity: `prog` (packed JSON: day, size, percent done, start
+ *     time, solve time) whenever it changes, `hb` (heartbeat) once a second, `n`/`c` (name,
+ *     color) once. Everyone draws everyone's progress bar from that.
+ *   - The HOST is the lowest sessionId among live players (heartbeat seen in the last 3s).
+ *     Only the host writes the shared field `ghosts` {d, list: [{i, n, c, at, dur}]}: ghost
+ *     solvers whose progress every client works out from `at` and `dur` (timestamps, not
+ *     ticks), so a new host just carries on.
+ *   - "solved" {t} is an event for the toast only; the time is in the solver's `prog`.
+ *   - Live ops: mp.live.config.size / .fill change the puzzle; .banner or an active event
+ *     shows a banner. Defaults come from CONFIG.
+ *   - Leaderboard "daily-YYYYMMDD": one board per day, lower time is better (it stores
+ *     3600000 - ms). Your streak is in your player save (localStorage offline).
+ *   - ?attract plays offline: an autopilot solves while ghosts race (the preview video).
+ */
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  size: 8,               // grid is size × size (live ops: config.size, 5–10)
+  fill: 0.5,             // how full the picture is (live ops: config.fill)
+  ghosts: 4,             // ghost solvers fill the room list up to this many people
+  ghostMin: 100000, ghostMax: 260000, // how long a ghost takes to solve (ms)
+  ghostStay: 25000,      // a solved ghost stays this long before a new one starts
+  saveNs: "daily-puzzle",
+  boardPrefix: "daily",  // leaderboard per day: daily-20261108
+  firstDay: "2026-01-01", // puzzle #1
+};
+const GHOST_NAMES = ["Pip", "Mochi", "Juno", "Quill", "Bram", "Tilly", "Otto", "Wren"];
+const COLORS = ["#ef6f6c", "#4f9cf9", "#f5b83d", "#3bb273", "#9b6dd6", "#f283b6", "#2fb8b8", "#f08a4b"];
+
+// ── CONNECTION ──────────────────────────────────────────────────────────────────────
+// The builder fills these in for this game. Downloaded from GitHub? Put your own pk_ key here.
+const MP_CONNECT = {
+  key: 'pk_REPLACE_ME',
+  room: 'daily-puzzle',
+  endpoint: 'wss://live.multiplayeragent.com',
+  apiUrl: 'https://api.multiplayeragent.com',
+};
+const ATTRACT = new URLSearchParams(location.search).has("attract");
+
+/** Same shape as the SDK client, kept in this tab: offline play and ?attract. */
+function localRoom() {
+  const id = "local", state = { entities: { players: { [id]: {} } }, shared: {} }, subs = [];
+  let queued = false;
+  const emit = () => { if (!queued) { queued = true; queueMicrotask(() => { queued = false; subs.forEach((f) => f(state)); }); } };
+  const put = (o, k, v) => { if (typeof k === "object") Object.assign(o, k); else o[k] = v; emit(); };
+  return {
+    sessionId: id, state, offline: true, live: { config: {}, active: [] },
+    me: { set: (k, v) => put(state.entities.players[id], k, v) },
+    setShared: (k, v) => put(state.shared, k, v),
+    onState: (f) => { subs.push(f); f(state); }, onJoin() {}, onLeave() {}, on() {}, send() {}, onLive() {},
+    onDisconnect() {}, onReconnect() {}, leave: async () => {},
+  };
+}
+async function connect() {
+  if (ATTRACT || typeof MP === "undefined") return localRoom();
+  try {
+    const mp = await Promise.race([MP.join({ ...MP_CONNECT }), new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 10000))]);
+    window.mp = mp; // the builder calls window.mp.leave() when the page closes
+    return mp;
+  } catch (e) {
+    console.warn("Playing offline:", e && e.message);
+    return localRoom();
+  }
+}
+const parse = (v, fb) => { if (typeof v !== "string") return fb; try { return JSON.parse(v); } catch { return fb; } };
+let net = null, S = { entities: { players: {} }, shared: {} };
+const seenHb = new Map();
+function livePlayers() {
+  const now = performance.now(), out = [];
+  for (const [id, p] of Object.entries(S.entities.players || {})) {
+    const s = seenHb.get(id);
+    if (!s || s.hb !== p.hb) seenHb.set(id, { hb: p.hb, at: now });
+    if (id === net.sessionId || now - seenHb.get(id).at < 3000) out.push(id);
+  }
+  return out.sort();
+}
+const isHost = () => livePlayers()[0] === net.sessionId;
+const liveConfig = () => (net && net.live && net.live.config) || {};
+
+// ── PUZZLE ──────────────────────────────────────────────────────────────────────────
+function mulberry32(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; }
+const clueOf = (line) => { const out = []; let run = 0; for (const v of line) { if (v === 1) run++; else if (run) { out.push(run); run = 0; } } if (run) out.push(run); return out.length ? out : [0]; };
+const column = (g, c) => g.map((row) => row[c]);
+const placeCache = new Map();
+/** Every way to lay out a clue on a line of n cells (cached). */
+function placements(clue, n) {
+  const key = clue + "/" + n; if (placeCache.has(key)) return placeCache.get(key);
+  const runs = clue[0] === 0 ? [] : clue, out = [], line = Array(n).fill(0);
+  (function place(i, from) {
+    if (i === runs.length) { out.push(line.slice()); return; }
+    const rest = runs.slice(i + 1).reduce((a, b) => a + b + 1, 0);
+    for (let s = from; s + runs[i] + rest <= n; s++) { line.fill(1, s, s + runs[i]); place(i + 1, s + runs[i] + 1); line.fill(0, s, s + runs[i]); }
+  })(0, 0);
+  placeCache.set(key, out); return out;
+}
+/** Solve line by line, no guessing. True when that alone fills the whole grid (so it has one solution). */
+function solvesByLogic(rows, cols, n) {
+  const k = Array.from({ length: n }, () => Array(n).fill(-1));
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [clues, across] of [[rows, true], [cols, false]]) for (let i = 0; i < n; i++) {
+      const get = (j) => (across ? k[i][j] : k[j][i]), set = (j, v) => (across ? (k[i][j] = v) : (k[j][i] = v));
+      const fits = placements(clues[i], n).filter((p) => p.every((v, j) => get(j) < 0 || get(j) === v));
+      if (!fits.length) return false;
+      for (let j = 0; j < n; j++) if (get(j) < 0 && fits.every((p) => p[j] === fits[0][j])) { set(j, fits[0][j]); changed = true; }
+    }
+  }
+  return k.every((row) => row.every((v) => v >= 0));
+}
+/** A mirrored little picture (they look like creatures) from a seed text, with one logical solution. */
+function makePuzzle(seedText, n, fill) {
+  const rnd = mulberry32(hashStr(seedText));
+  let g = null;
+  for (let tries = 0; tries < 400; tries++) {
+    g = Array.from({ length: n }, () => { const half = Array.from({ length: Math.ceil(n / 2) }, () => (rnd() < fill ? 1 : 0)); return Array.from({ length: n }, (_, c) => half[Math.min(c, n - 1 - c)]); });
+    const full = (line) => !line.includes(0), cols = g[0].map((_, c) => column(g, c));
+    if (g.some((row) => !row.includes(1)) || cols.some((col) => !col.includes(1))) continue; // no blank lines
+    if (g.filter(full).length > 1 || cols.filter(full).length > 1) continue;                   // too easy
+    if (solvesByLogic(g.map(clueOf), g[0].map((_, c) => clueOf(column(g, c))), n)) break;
+  }
+  return { n, sol: g, rows: g.map(clueOf), cols: g[0].map((_, c) => clueOf(column(g, c))), hue: hashStr(seedText + "hue") % 360 };
+}
+
+// ── BOARD ───────────────────────────────────────────────────────────────────────────
+// cells: 0 empty, 1 filled, 2 marked ✕
+const game = { pz: null, cells: [], mode: "daily", day: "", start: 0, solvedMs: 0, key: "", wonAt: 0 };
+let tool = 1;
+const cv = document.getElementById("board"), ctx = cv.getContext("2d");
+const geo = { cs: 30, x0: 0, y0: 0, W: 0, H: 0 };
+function layout() {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+  cv.width = r.width * dpr; cv.height = r.height * dpr; geo.W = r.width; geo.H = r.height; geo.dpr = dpr;
+  if (!game.pz) return;
+  const n = game.pz.n, clueW = Math.max(...game.pz.rows.map((c) => c.length)) * 0.62 + 0.5, clueH = Math.max(...game.pz.cols.map((c) => c.length)) * 0.62 + 0.5;
+  geo.cs = Math.floor(Math.min(r.width / (n + clueW), r.height / (n + clueH)));
+  geo.x0 = Math.round((r.width - geo.cs * (n + clueW)) / 2 + geo.cs * clueW); geo.y0 = Math.round((r.height - geo.cs * (n + clueH)) / 2 + geo.cs * clueH);
+}
+addEventListener("resize", layout); addEventListener("orientationchange", layout);
+const clueText = (cells) => clueOf(cells.map((v) => (v === 1 ? 1 : 0))).join();
+const rowOk = (r) => clueText(game.cells[r]) === game.pz.rows[r].join();
+const colOk = (c) => clueText(column(game.cells, c)) === game.pz.cols[c].join();
+const solved = () => game.pz && game.cells.every((_, r) => rowOk(r)) && game.cells[0].every((_, c) => colOk(c));
+/** Percent done: right fills minus wrong fills, out of the picture's filled cells (100 only when solved). */
+function progress() {
+  if (!game.pz) return 0; if (solved()) return 100;
+  let good = 0, bad = 0, total = 0;
+  game.pz.sol.forEach((row, r) => row.forEach((v, c) => { total += v; if (game.cells[r][c] === 1) v ? good++ : bad++; }));
+  return Math.max(0, Math.min(99, Math.floor((100 * (good - bad)) / total)));
+}
+const parts = [];
+function draw(now) {
+  ctx.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0); ctx.clearRect(0, 0, geo.W, geo.H);
+  if (!game.pz) return;
+  const { n } = game.pz, cs = geo.cs, x0 = geo.x0, y0 = geo.y0, won = game.solvedMs > 0, t = (now - game.wonAt) / 1000;
+  ctx.font = `700 ${Math.max(11, cs * 0.42)}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let i = 0; i < n; i++) { // clues: grey once the line is right
+    ctx.fillStyle = hoverCell && hoverCell.c === i && !won ? "#fbe3d6" : "transparent"; ctx.fillRect(x0 + i * cs, 0, cs, y0 - 2);
+    ctx.fillStyle = colOk(i) ? "#c8c2b4" : "#2b2d42"; game.pz.cols[i].slice().reverse().forEach((v, k) => ctx.fillText(v, x0 + (i + 0.5) * cs, y0 - (k + 0.6) * cs * 0.62));
+    ctx.fillStyle = hoverCell && hoverCell.r === i && !won ? "#fbe3d6" : "transparent"; ctx.fillRect(0, y0 + i * cs, x0 - 2, cs);
+    ctx.fillStyle = rowOk(i) ? "#c8c2b4" : "#2b2d42"; game.pz.rows[i].slice().reverse().forEach((v, k) => ctx.fillText(v, x0 - (k + 0.6) * cs * 0.62, y0 + (i + 0.5) * cs));
+  }
+  ctx.fillStyle = "#fffdf8"; ctx.fillRect(x0, y0, n * cs, n * cs);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const v = game.cells[r][c], x = x0 + c * cs, y = y0 + r * cs;
+    if (v === 1) {
+      const wave = won ? Math.min(1, Math.max(0, t * 3 - (r + c) * 0.15)) : 0; // the picture colors in after a win
+      ctx.fillStyle = wave ? `hsl(${game.pz.hue + r * 8},70%,${58 - wave * 8}%)` : "#2b2d42";
+      const pad = cs * 0.06 * (1 - wave); ctx.beginPath(); ctx.roundRect(x + pad + 1, y + pad + 1, cs - 2 * pad - 2, cs - 2 * pad - 2, cs * 0.12); ctx.fill();
+    } else if (v === 2 && !won) {
+      ctx.strokeStyle = "#b9b2a3"; ctx.lineWidth = Math.max(1.5, cs * 0.06); ctx.beginPath();
+      ctx.moveTo(x + cs * 0.3, y + cs * 0.3); ctx.lineTo(x + cs * 0.7, y + cs * 0.7); ctx.moveTo(x + cs * 0.7, y + cs * 0.3); ctx.lineTo(x + cs * 0.3, y + cs * 0.7); ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = "#d9d2c3"; ctx.lineWidth = 1; ctx.beginPath();
+  for (let i = 0; i <= n; i++) { ctx.moveTo(x0 + i * cs + 0.5, y0); ctx.lineTo(x0 + i * cs + 0.5, y0 + n * cs); ctx.moveTo(x0, y0 + i * cs + 0.5); ctx.lineTo(x0 + n * cs, y0 + i * cs + 0.5); }
+  ctx.stroke(); ctx.strokeStyle = "#2b2d42"; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, n * cs, n * cs);
+  for (let i = parts.length - 1; i >= 0; i--) { // confetti
+    const p = parts[i]; p.life -= 1 / 60; p.vy += 0.25; p.x += p.vx; p.y += p.vy;
+    if (p.life <= 0) { parts.splice(i, 1); continue; }
+    ctx.fillStyle = p.color; ctx.globalAlpha = Math.min(1, p.life * 2); ctx.fillRect(p.x, p.y, 7, 7); ctx.globalAlpha = 1;
+  }
+}
+function confetti() { for (let i = 0; i < 90; i++) parts.push({ x: geo.x0 + geo.cs * game.pz.n / 2, y: geo.y0 + geo.cs * game.pz.n / 2, vx: (Math.random() - 0.5) * 12, vy: -Math.random() * 10, life: 1.5 + Math.random(), color: COLORS[i % COLORS.length] }); }
+/** Set one cell (the timer starts on your first move) and check for the win. */
+function setCell(r, c, v) {
+  if (game.solvedMs || game.cells[r][c] === v) return;
+  if (!game.start) game.start = Date.now();
+  game.cells[r][c] = v; saveGrid();
+  if (solved()) win();
+  publish(true);
+}
+const cellAt = (e) => { const b = cv.getBoundingClientRect(), c = Math.floor((e.clientX - b.left - geo.x0) / geo.cs), r = Math.floor((e.clientY - b.top - geo.y0) / geo.cs); return game.pz && r >= 0 && c >= 0 && r < game.pz.n && c < game.pz.n ? { r, c } : null; };
+let drag = null, hoverCell = null;
+cv.addEventListener("pointerdown", (e) => {
+  const at = cellAt(e); if (!at || game.solvedMs) return;
+  e.preventDefault(); cv.setPointerCapture(e.pointerId);
+  const want = e.button === 2 ? 2 : tool, was = game.cells[at.r][at.c], to = was === want ? 0 : want;
+  drag = { from: at, was, to, axis: null }; setCell(at.r, at.c, to);
+});
+cv.addEventListener("pointermove", (e) => {
+  hoverCell = e.pointerType === "mouse" ? cellAt(e) : null;
+  const at = cellAt(e); if (!drag || !at) return;
+  drag.axis = drag.axis || (at.r === drag.from.r && at.c !== drag.from.c ? "row" : at.c === drag.from.c && at.r !== drag.from.r ? "col" : null);
+  if (!drag.axis) return;
+  const [r0, c0] = drag.axis === "row" ? [drag.from.r, Math.min(at.c, drag.from.c)] : [Math.min(at.r, drag.from.r), drag.from.c], len = drag.axis === "row" ? Math.abs(at.c - drag.from.c) : Math.abs(at.r - drag.from.r);
+  for (let k = 0; k <= len; k++) { const r = drag.axis === "row" ? r0 : r0 + k, c = drag.axis === "row" ? c0 + k : c0; if (game.cells[r][c] === drag.was) setCell(r, c, drag.to); } // a drag only paints cells like the first one
+});
+for (const ev of ["pointerup", "pointercancel"]) cv.addEventListener(ev, () => (drag = null));
+cv.addEventListener("pointerleave", () => (hoverCell = null));
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
+
+// ── DAY & SAVES ─────────────────────────────────────────────────────────────────────
+const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10).replace(/-/g, ""); // the UTC day, e.g. 20261108
+const puzzleNo = (k) => Math.floor((Date.UTC(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6)) - Date.parse(CONFIG.firstDay)) / 86400000) + 1;
+const sizeNow = () => Math.max(5, Math.min(10, Math.round(+liveConfig().size || CONFIG.size)));
+const fillNow = () => Math.max(0.35, Math.min(0.75, +liveConfig().fill || CONFIG.fill));
+let player = null, save = { last: "", streak: 0, best: 0, days: {} };
+const store = {
+  async load() {
+    if (player) try { const d = await player.data.get(CONFIG.saveNs); if (d && d.data && d.data.days) return d.data; } catch {}
+    try { return JSON.parse(localStorage.getItem("daily-puzzle.save")) || save; } catch { return save; }
+  },
+  async write(data) {
+    try { localStorage.setItem("daily-puzzle.save", JSON.stringify(data)); } catch {}
+    if (player) { await player.data.get(CONFIG.saveNs).catch(() => null); await player.data.set(data, { namespace: CONFIG.saveNs }).catch(() => null); }
+  },
+};
+/** Today's solve counts toward the streak if you solved yesterday too. */
+function recordSolve(day, ms) {
+  if (save.days[day]) return;
+  const yesterday = dayKey(Date.UTC(+day.slice(0, 4), +day.slice(4, 6) - 1, +day.slice(6)) - 86400000);
+  save.streak = save.last === yesterday ? save.streak + 1 : 1; save.best = Math.max(save.best, save.streak); save.last = day;
+  save.days[day] = ms; const keep = Object.keys(save.days).sort().slice(-60); save.days = Object.fromEntries(keep.map((k) => [k, save.days[k]]));
+  if (!ATTRACT) store.write(save);
+}
+const streakNow = () => (save.last === dayKey() || save.last === dayKey(Date.now() - 86400000) ? save.streak : 0);
+const boardName = () => `${CONFIG.boardPrefix}-${game.day}${game.pz.n !== CONFIG.size ? "-" + game.pz.n : ""}`;
+function gridKey() { return `daily-puzzle.grid.${game.key}`; }
+function saveGrid() { if (game.mode === "daily" && !ATTRACT) try { localStorage.setItem(gridKey(), JSON.stringify({ cells: game.cells, start: game.start })); } catch {} }
+/** Today's puzzle (or a practice one): your grid comes back if you were part way through. */
+function startPuzzle(mode) {
+  game.mode = mode; game.day = dayKey(); game.solvedMs = 0; game.start = 0; parts.length = 0;
+  const n = sizeNow(), seed = mode === "daily" ? `${game.day}:${n}:${fillNow()}` : "practice" + Math.random();
+  game.key = `${game.day}.${n}`; game.pz = makePuzzle(seed, n, fillNow());
+  game.cells = Array.from({ length: n }, () => Array(n).fill(0));
+  if (mode === "daily" && !ATTRACT) {
+    const kept = parse((() => { try { return localStorage.getItem(gridKey()); } catch { return null; } })(), null);
+    if (kept && kept.cells && kept.cells.length === n) { game.cells = kept.cells; game.start = kept.start || 0; }
+    if (save.days[game.day] !== undefined && solved()) { game.solvedMs = save.days[game.day]; game.wonAt = performance.now() - 5000; }
+  }
+  $("title").textContent = mode === "daily" ? `Daily Puzzle #${puzzleNo(game.day)}` : "Practice";
+  $("date").textContent = mode === "daily" ? new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" }) + ` · ${n}×${n}` : `${n}×${n} · not on the board`;
+  $("practice").textContent = mode === "daily" ? "Practice" : "Today's puzzle";
+  attract.plan = null; layout(); publish(true);
+}
+function win() {
+  game.solvedMs = Math.max(1000, Date.now() - game.start); game.wonAt = performance.now(); confetti();
+  if (game.mode !== "daily") { setTimeout(() => showCard(), 1200); return; }
+  recordSolve(game.day, game.solvedMs); saveGrid();
+  net.send("solved", { t: game.solvedMs });
+  setTimeout(() => showCard(), 1200);
+}
+
+// ── ROOM ────────────────────────────────────────────────────────────────────────────
+let lastPublish = 0, lastSent = "";
+/** My progress for everyone (only when it changes, at most 4 times a second). */
+function publish(force) {
+  const now = performance.now(); if (!net || (!force && now - lastPublish < 250)) return;
+  const v = JSON.stringify({ d: game.mode === "daily" ? game.day : "practice", s: game.pz ? game.pz.n : 0, p: progress(), st: game.start, t: game.solvedMs });
+  if (v === lastSent) return; lastSent = v; lastPublish = now; net.me.set("prog", v);
+}
+const host = { last: null };
+/** The ghosts as state has them, or the host's own newer write. */
+function ghosts() { const g = parse(S.shared.ghosts, null); return host.last && isHost() && (!g || host.last.v > g.v) ? host.last : g; }
+function writeGhosts(g) { g = { ...g, v: (ghosts()?.v ?? 0) + 1 }; host.last = g; net.setShared("ghosts", JSON.stringify(g)); }
+function ghostProgress(g, now) { const x = (now - g.at) / g.dur; return x >= 1 ? 100 : x <= 0 ? 0 : Math.max(0, Math.min(99, Math.floor(100 * x ** 1.15 + 5 * Math.sin(x * 19 + g.i.charCodeAt(1))))); }
+function newGhost(now, taken) {
+  const name = GHOST_NAMES.find((n) => !taken.some((g) => g.n === n)) || "Ghost", dur = CONFIG.ghostMin + Math.random() * (CONFIG.ghostMax - CONFIG.ghostMin);
+  return { i: "g" + Math.random().toString(36).slice(2, 6), n: name, c: COLORS[(GHOST_NAMES.indexOf(name) + 3) % COLORS.length], at: now - Math.random() * dur * 0.6, dur: Math.round(dur) };
+}
+/** Host: keep enough ghosts solving today's puzzle; a solved one lingers, then a new one starts. */
+function hostTick() {
+  const now = Date.now(), day = dayKey(), g = ghosts();
+  let list = g && g.d === day ? g.list : [];
+  const want = Math.max(0, CONFIG.ghosts - livePlayers().filter((id) => !(ATTRACT && id === net.sessionId)).length);
+  const keep = list.filter((x) => now < x.at + x.dur + CONFIG.ghostStay).slice(0, want);
+  while (keep.length < want) keep.push(newGhost(now, keep));
+  if (!g || g.d !== day || keep.length !== list.length || keep.some((x, i) => x !== list[i])) writeGhosts({ d: day, list: keep });
+}
+const fmt = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+/** Everyone on today's puzzle: you, other players and the ghosts, solved first, fastest first. */
+function roster() {
+  const now = Date.now(), out = [];
+  for (const id of livePlayers()) {
+    if (ATTRACT && id === net.sessionId) continue;
+    const p = S.entities.players[id] || {}, me = id === net.sessionId, pr = me ? { d: game.mode === "daily" ? game.day : "practice", p: progress(), st: game.start, t: game.solvedMs } : parse(p.prog, {});
+    out.push({ id, n: me ? (myName || "You") : p.n || "Player", c: me ? myColor : p.c || "#999", me, p: pr.d === game.day ? pr.p || 0 : 0, t: pr.d === game.day ? pr.t || 0 : 0, st: pr.st, note: pr.d === "practice" ? "practicing" : pr.d !== game.day ? "not started" : "" });
+  }
+  for (const g of (ghosts() || { list: [] }).list) { const p = ghostProgress(g, now); out.push({ id: g.i, n: g.n, c: g.c, ghost: true, p, t: p >= 100 ? g.dur : 0, st: g.at }); }
+  return out.sort((a, b) => (a.t && b.t ? a.t - b.t : a.t ? -1 : b.t ? 1 : b.p - a.p));
+}
+const announced = new Set();
+function listUI() {
+  const now = Date.now(), rows = roster(), first = !announced.size; // no toasts for people already done when you arrive
+  for (const r of rows) if (r.t && !r.me && !announced.has(r.id + game.day)) { if (!first) toast(`${r.n} solved it in ${fmt(r.t)}!`); announced.add(r.id + game.day); }
+  announced.add("-");
+  $("list").innerHTML = rows.map((r) => `<div class="who ${r.me ? "me" : ""} ${r.t ? "done" : ""}"><i style="background:${esc(r.c)}"></i><b>${esc(r.n)}${r.ghost ? " 👻" : ""}</b>
+    <span>${r.t ? "✓ " + fmt(r.t) : r.note || (r.st ? fmt(now - r.st) : "–")}</span><div class="bar"><u style="width:${r.p}%;background:${esc(r.c)}"></u></div></div>`).join("");
+}
+
+// ── SCREENS ─────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+let toastTimer = 0;
+function toast(t) { if (ATTRACT && !/solved/.test(t)) return; $("toast").textContent = t; $("toast").style.opacity = 1; clearTimeout(toastTimer); toastTimer = setTimeout(() => ($("toast").style.opacity = 0), 2600); }
+$("fill").onclick = () => { tool = 1; $("fill").classList.add("on"); $("mark").classList.remove("on"); };
+$("mark").onclick = () => { tool = 2; $("mark").classList.add("on"); $("fill").classList.remove("on"); };
+$("practice").onclick = () => startPuzzle(game.mode === "daily" ? "practice" : "daily");
+$("dlg").addEventListener("pointerdown", (e) => { if (e.target === $("dlg")) $("dlg").hidden = true; });
+const untilTomorrow = () => { const d = new Date(), next = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1); const s = Math.floor((next - Date.now()) / 1000); return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`; };
+function showCard() {
+  if (ATTRACT) return;
+  const daily = game.mode === "daily", board = daily && player ? player.leaderboard(boardName()) : null;
+  $("card").innerHTML = `<h2>${daily ? "Solved! 🎉" : "Nice one!"}</h2><div class="big">${fmt(game.solvedMs)}</div>
+    ${daily ? `<p>🔥 Streak ${streakNow()} · best ${save.best}</p><h3>Today's fastest</h3><ol id="top"><li>${board ? "Loading…" : "Leaderboards need a connection."}</li></ol><p>Next puzzle in ${untilTomorrow()}</p>` : "<p>Practice puzzles don't go on the board.</p>"}
+    <div class="row"><button id="cPractice">${daily ? "Practice" : "Another one"}</button><button class="primary" id="cClose">${daily ? "See the room" : "Today's puzzle"}</button></div>`;
+  $("dlg").hidden = false;
+  $("cPractice").onclick = () => { $("dlg").hidden = true; startPuzzle("practice"); };
+  $("cClose").onclick = () => { $("dlg").hidden = true; if (!daily) startPuzzle("daily"); };
+  if (!board) return;
+  const mine = game.solvedMs;
+  board.submit(Math.max(0, 3600000 - mine)).catch(() => null).then(() => board.top(10)).then(({ entries }) => {
+    $("top").innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(3600000 - e.score)}</span></li>`).join("") : "<li>No times yet.</li>";
+  }).catch(() => { if ($("top")) $("top").innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+}
+function hud() {
+  const live = (net && net.live) || {}, ev = (live.active || [])[0];
+  $("banner").textContent = ATTRACT ? "" : liveConfig().banner || (ev ? ev.title + (ev.description ? ": " + ev.description : "") : "");
+  $("streak").textContent = streakNow() ? `🔥 ${streakNow()}` : "";
+  $("clock").textContent = game.solvedMs ? "✓ " + fmt(game.solvedMs) : game.start ? fmt(Date.now() - game.start) : "0:00";
+  const n = livePlayers().length - (ATTRACT ? 1 : 0);
+  $("net").textContent = ATTRACT ? "" : net.offline ? "Offline: playing with ghosts" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the ghosts" : ""}`;
+  listUI();
+}
+
+// ?attract: solve today's puzzle like a quick human (fills with a few marks), while ghosts race.
+const attract = { plan: null, next: 0 };
+function attractTick(now) {
+  if (!attract.plan) {
+    const cells = []; game.pz.sol.forEach((row, r) => row.forEach((v, c) => cells.push({ r, c, v: v ? 1 : (r + c) % 4 === 0 ? 2 : 0 })));
+    attract.plan = cells.filter((x) => x.v).sort((a, b) => a.r - b.r || a.c - b.c); attract.next = now + 1200;
+  }
+  while (attract.plan.length && now > attract.next && !game.solvedMs) { const x = attract.plan.shift(); setCell(x.r, x.c, x.v); hoverCell = { r: x.r, c: x.c }; attract.next += 105; }
+  if (game.solvedMs && performance.now() - game.wonAt > 5000) startPuzzle("practice");
+}
+
+// ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
+let myName = "", myColor = COLORS[0], lastHb = 0, lastHud = 0, lastHost = 0;
+try { myName = localStorage.getItem("mpa-name") || ""; } catch {}
+$("name").value = myName;
+$("name").addEventListener("change", () => { myName = $("name").value.trim().slice(0, 16); try { localStorage.setItem("mpa-name", myName); } catch {} net && net.me.set("n", myName || "Player"); });
+function frame(now) {
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); }
+  if (now - lastHost > 1000 && isHost()) { lastHost = now; hostTick(); }
+  if (game.mode === "daily" && game.day !== dayKey()) startPuzzle("daily"); // midnight UTC: a new puzzle
+  if (ATTRACT) attractTick(now);
+  publish(false);
+  draw(now);
+  if (now - lastHud > 250) { lastHud = now; hud(); }
+  requestAnimationFrame(frame);
+}
+
+(async function start() {
+  net = await connect();
+  net.onState((st) => { S = st; });
+  net.on("solved", (m, from) => { const p = S.entities.players[from]; if (m && p && !announced.has(from + game.day)) { announced.add(from + game.day); toast(`${p.n || "Someone"} solved it in ${fmt(m.t)}!`); } });
+  net.onDisconnect(() => { $("net").textContent = "Reconnecting…"; });
+  // a live ops change of size or fill swaps in the new puzzle if you haven't started this one
+  net.onLive(() => { if (game.pz && !game.start && game.mode === "daily" && game.key !== `${dayKey()}.${sizeNow()}`) startPuzzle("daily"); hud(); });
+  if (!net.offline && typeof MP !== "undefined") player = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl });
+  if (!ATTRACT) save = { ...save, ...(await store.load()) };
+  const taken = new Set(Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c));
+  myColor = COLORS.find((c) => !taken.has(c)) || COLORS[Math.floor(Math.random() * COLORS.length)];
+  net.me.set({ n: myName || "Player", c: myColor, hb: Date.now() });
+  if (ATTRACT) { $("name").style.display = "none"; Object.assign(CONFIG, { ghosts: 5, ghostMin: 9000, ghostMax: 22000, ghostStay: 4000 }); }
+  startPuzzle("daily");
+  if (game.solvedMs) setTimeout(showCard, 600);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

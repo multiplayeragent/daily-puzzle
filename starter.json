@@ -1,0 +1,22 @@
+{
+  "name": "Daily Puzzle",
+  "genre": "puzzle",
+  "dim": "2D",
+  "mode": "Versus",
+  "players": "1+",
+  "hook": "One new puzzle a day. Beat your friends’ time.",
+  "how": "Everyone in the world gets the same picture puzzle each day. Fill the squares so every row and column matches its numbers, and a little picture appears. Your time goes on today's board, and your streak grows every day you solve it.",
+  "controls": "Tap or drag to fill squares; switch to ✕ Mark (or right-click) to mark empty ones",
+  "uses": [
+    ["Leaderboard", "One board per day: today's fastest solves."],
+    ["Live sync", "See everyone in the room solving today's puzzle, live."],
+    ["Live ops", "The owner can change the puzzle size or show an event banner on a schedule, with no new deploy."],
+    ["Saves", "Your streak is kept in your player save."],
+    ["Bots", "Ghost solvers race you when the room is quiet."]
+  ],
+  "ideas": [
+    "Switch to a five-letter word puzzle",
+    "Add a harder puzzle on Sundays",
+    "Add a share button with my time and streak"
+  ]
+}
