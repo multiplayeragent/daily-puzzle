@@ -352,7 +352,9 @@ function writeGhosts(g) { g = { ...g, v: (ghosts()?.v ?? 0) + 1 }; host.last = g
 function ghostProgress(g, now) { const x = (now - g.at) / g.dur; return x >= 1 ? 100 : x <= 0 ? 0 : Math.max(0, Math.min(99, Math.floor(100 * x ** 1.15 + 5 * Math.sin(x * 19 + g.i.charCodeAt(1))))); }
 function newGhost(now, taken) {
   const name = GHOST_NAMES.find((n) => !taken.some((g) => g.n === n)) || "Ghost", dur = CONFIG.ghostMin + Math.random() * (CONFIG.ghostMax - CONFIG.ghostMin);
-  return { i: "g" + Math.random().toString(36).slice(2, 6), n: name, c: COLORS[(GHOST_NAMES.indexOf(name) + 3) % COLORS.length], at: now - Math.random() * dur * 0.6, dur: Math.round(dur) };
+  const used = new Set([...taken.map((g) => g.c), ...livePlayers().filter((id) => !(ATTRACT && id === net.sessionId)).map((id) => (id === net.sessionId ? myColor : S.entities.players[id]?.c))]);
+  let c = COLORS[(GHOST_NAMES.indexOf(name) + 3) % COLORS.length]; if (used.has(c)) c = COLORS.find((x) => !used.has(x)) || c; // never a player's color
+  return { i: "g" + Math.random().toString(36).slice(2, 6), n: name, c, at: now - Math.random() * dur * 0.6, dur: Math.round(dur) };
 }
 /** Host: keep enough ghosts solving today's puzzle; a solved one lingers, then a new one starts. */
 function hostTick() {
@@ -409,13 +411,14 @@ function showCard() {
     $("top").innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(3600000 - e.score)}</span></li>`).join("") : "<li>No times yet.</li>";
   }).catch(() => { if ($("top")) $("top").innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
 }
+let dropped = false; // true while the connection is down: the HUD keeps showing "Reconnecting…"
 function hud() {
   const live = (net && net.live) || {}, ev = (live.active || [])[0];
   $("banner").textContent = ATTRACT ? "" : liveConfig().banner || (ev ? ev.title + (ev.description ? ": " + ev.description : "") : "");
   $("streak").textContent = streakNow() ? `🔥 ${streakNow()}` : "";
   $("clock").textContent = game.solvedMs ? "✓ " + fmt(game.solvedMs) : game.start ? fmt(Date.now() - game.start) : "0:00";
   const n = livePlayers().length - (ATTRACT ? 1 : 0);
-  $("net").textContent = ATTRACT ? "" : net.offline ? "Offline: playing with ghosts" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the ghosts" : ""}`;
+  $("net").textContent = ATTRACT ? "" : net.offline ? "Offline: playing with ghosts" : dropped ? "Reconnecting…" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the ghosts" : ""}`;
   listUI();
 }
 
@@ -436,7 +439,7 @@ try { myName = localStorage.getItem("mpa-name") || ""; } catch {}
 $("name").value = myName;
 $("name").addEventListener("change", () => { myName = $("name").value.trim().slice(0, 16); try { localStorage.setItem("mpa-name", myName); } catch {} net && net.me.set("n", myName || "Player"); });
 function frame(now) {
-  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); }
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
   if (now - lastHost > 1000 && isHost()) { lastHost = now; hostTick(); }
   if (game.mode === "daily" && game.day !== dayKey()) startPuzzle("daily"); // midnight UTC: a new puzzle
   if (ATTRACT) attractTick(now);
@@ -446,16 +449,26 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+/** Two players picked the same color at once (the joiner's first state can be empty): the later sessionId picks again.
+ *  The ghosts' colors count as taken too. */
+function fixColor() {
+  const others = Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId), ghostColors = (ghosts()?.list || []).map((g) => g.c);
+  if (!others.some(([id, p]) => p.c === myColor && id < net.sessionId) && !ghostColors.includes(myColor)) return;
+  const taken = new Set([...others.map(([, p]) => p.c), ...ghostColors]);
+  myColor = COLORS.find((c) => !taken.has(c)) || myColor; net.me.set("c", myColor);
+}
+
 (async function start() {
   net = await connect();
   net.onState((st) => { S = st; });
   net.on("solved", (m, from) => { const p = S.entities.players[from]; if (m && p && !announced.has(from + game.day)) { announced.add(from + game.day); toast(`${p.n || "Someone"} solved it in ${fmt(m.t)}!`); } });
-  net.onDisconnect(() => { $("net").textContent = "Reconnecting…"; });
+  net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
+  net.onReconnect(() => { dropped = false; });
   // a live ops change of size or fill swaps in the new puzzle if you haven't started this one
   net.onLive(() => { if (game.pz && !game.start && game.mode === "daily" && game.key !== `${dayKey()}.${sizeNow()}`) startPuzzle("daily"); hud(); });
   if (!net.offline && typeof MP !== "undefined") player = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl });
   if (!ATTRACT) save = { ...save, ...(await store.load()) };
-  const taken = new Set(Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c));
+  const taken = new Set([...Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c), ...(ghosts()?.list || []).map((g) => g.c)]);
   myColor = COLORS.find((c) => !taken.has(c)) || COLORS[Math.floor(Math.random() * COLORS.length)];
   net.me.set({ n: myName || "Player", c: myColor, hb: Date.now() });
   if (ATTRACT) { $("name").style.display = "none"; Object.assign(CONFIG, { ghosts: 5, ghostMin: 9000, ghostMax: 22000, ghostStay: 4000 }); }
