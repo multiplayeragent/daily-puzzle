@@ -439,6 +439,7 @@ try { myName = localStorage.getItem("mpa-name") || ""; } catch {}
 $("name").value = myName;
 $("name").addEventListener("change", () => { myName = $("name").value.trim().slice(0, 16); try { localStorage.setItem("mpa-name", myName); } catch {} net && net.me.set("n", myName || "Player"); });
 function frame(now) {
+  requestAnimationFrame(frame);
   if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
   if (now - lastHost > 1000 && isHost()) { lastHost = now; hostTick(); }
   if (game.mode === "daily" && game.day !== dayKey()) startPuzzle("daily"); // midnight UTC: a new puzzle
@@ -446,7 +447,6 @@ function frame(now) {
   publish(false);
   draw(now);
   if (now - lastHud > 250) { lastHud = now; hud(); }
-  requestAnimationFrame(frame);
 }
 
 /** Two players picked the same color at once (the joiner's first state can be empty): the later sessionId picks again.
