@@ -149,7 +149,8 @@ function livePlayers() {
   }
   return out.sort();
 }
-const isHost = () => livePlayers()[0] === net.sessionId;
+let hostHold = 0, lastTick = performance.now(); // lastTick: when frame() last ran; hostHold: after a freeze, no hosting before this time (see frame())
+const isHost = () => performance.now() > hostHold && performance.now() - lastTick < 1000 && livePlayers()[0] === net.sessionId; // a tab whose loop has stopped doesn't host
 const liveConfig = () => (net && net.live && net.live.config) || {};
 
 // ── PUZZLE ──────────────────────────────────────────────────────────────────────────
@@ -440,6 +441,8 @@ $("name").value = myName;
 $("name").addEventListener("change", () => { myName = $("name").value.trim().slice(0, 16); try { localStorage.setItem("mpa-name", myName); } catch {} net && net.me.set("n", myName || "Player"); });
 function frame(now) {
   requestAnimationFrame(frame);
+  if (performance.now() - lastTick > 1000) hostHold = performance.now() + 700; // the tab was frozen or in the background: let what the stand-in host wrote meanwhile arrive before acting as host
+  lastTick = performance.now(); // not the rAF time: after a long freeze Chrome can stamp the first frame from before it ended
   if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
   if (now - lastHost > 1000 && isHost()) { lastHost = now; hostTick(); }
   if (game.mode === "daily" && game.day !== dayKey()) startPuzzle("daily"); // midnight UTC: a new puzzle
