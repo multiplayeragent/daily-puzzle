@@ -37,6 +37,7 @@
   .card h2 { margin: 0 0 4px; font-size: 24px; } .card .big { font: 800 36px ui-monospace, Consolas, monospace; margin: 4px 0; }
   .card h3 { margin: 14px 0 4px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
   .card ol { text-align: left; margin: 0; padding-left: 24px; font-size: 14px; } .card li span { float: right; font-family: ui-monospace, Consolas, monospace; }
+  .card li.msg { list-style: none; margin-left: -24px; text-align: center; color: var(--dim); }
   .card p { margin: 8px 0; color: var(--dim); } .row { display: flex; gap: 8px; margin-top: 14px; } .row > * { flex: 1; }
   @media (max-width: 640px) { main { flex-direction: column; } #side { flex: none; max-height: 30vh; } #name { width: 96px; } header h1 { font-size: 18px; } }
 </style>
@@ -401,7 +402,7 @@ function showCard() {
   if (ATTRACT) return;
   const daily = game.mode === "daily", board = daily && player ? player.leaderboard(boardName()) : null;
   $("card").innerHTML = `<h2>${daily ? "Solved! 🎉" : "Nice one!"}</h2><div class="big">${fmt(game.solvedMs)}</div>
-    ${daily ? `<p>🔥 Streak ${streakNow()} · best ${save.best}</p><h3>Today's fastest</h3><ol id="top"><li>${board ? "Loading…" : "Leaderboards need a connection."}</li></ol><p>Next puzzle in ${untilTomorrow()}</p>` : "<p>Practice puzzles don't go on the board.</p>"}
+    ${daily ? `<p>🔥 Streak ${streakNow()} · best ${save.best}</p><h3>Today's fastest</h3><ol id="top"><li class="msg">${board ? "Loading…" : "Leaderboards need a connection."}</li></ol><p>Next puzzle in ${untilTomorrow()}</p>` : "<p>Practice puzzles don't go on the board.</p>"}
     <div class="row"><button id="cPractice">${daily ? "Practice" : "Another one"}</button><button class="primary" id="cClose">${daily ? "See the room" : "Today's puzzle"}</button></div>`;
   $("dlg").hidden = false;
   $("cPractice").onclick = () => { $("dlg").hidden = true; startPuzzle("practice"); };
@@ -409,8 +410,8 @@ function showCard() {
   if (!board) return;
   const mine = game.solvedMs;
   board.submit(Math.max(0, 3600000 - mine)).catch(() => null).then(() => board.top(10)).then(({ entries }) => {
-    $("top").innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(3600000 - e.score)}</span></li>`).join("") : "<li>No times yet.</li>";
-  }).catch(() => { if ($("top")) $("top").innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+    $("top").innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(3600000 - e.score)}</span></li>`).join("") : '<li class="msg">No times yet.</li>';
+  }).catch(() => { if ($("top")) $("top").innerHTML = '<li class="msg">Couldn\'t load the leaderboard.</li>'; });
 }
 let dropped = false; // true while the connection is down: the HUD keeps showing "Reconnecting…"
 function hud() {
