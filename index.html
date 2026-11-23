@@ -82,7 +82,7 @@
  *     solvers whose progress every client works out from `at` and `dur` (timestamps, not
  *     ticks), so a new host just carries on.
  *   - "solved" {t} is an event for the toast only; the time is in the solver's `prog`.
- *   - Live ops: mp.live.config.size / .fill change the puzzle; .banner or an active event
+ *   - Live ops: mp.live.config.size / .fill change the puzzle (and its board and saved grid); .banner or an active event
  *     shows a banner. Defaults come from CONFIG.
  *   - Leaderboard "daily-YYYYMMDD": one board per day, lower time is better (it stores
  *     3600000 - ms). Your streak is in your player save (localStorage offline).
@@ -214,6 +214,7 @@ function layout() {
   geo.x0 = Math.round((r.width - geo.cs * (n + clueW)) / 2 + geo.cs * clueW); geo.y0 = Math.round((r.height - geo.cs * (n + clueH)) / 2 + geo.cs * clueH);
 }
 addEventListener("resize", layout); addEventListener("orientationchange", layout);
+if (window.ResizeObserver) new ResizeObserver(() => layout()).observe(cv); // the room list growing (phones: it sits under the board) resizes the board too
 const clueText = (cells) => clueOf(cells.map((v) => (v === 1 ? 1 : 0))).join();
 const rowOk = (r) => clueText(game.cells[r]) === game.pz.rows[r].join();
 const colOk = (c) => clueText(column(game.cells, c)) === game.pz.cols[c].join();
@@ -312,14 +313,15 @@ function recordSolve(day, ms) {
   if (!ATTRACT) store.write(save);
 }
 const streakNow = () => (save.last === dayKey() || save.last === dayKey(Date.now() - 86400000) ? save.streak : 0);
-const boardName = () => `${CONFIG.boardPrefix}-${game.day}${game.pz.n !== CONFIG.size ? "-" + game.pz.n : ""}`;
+const boardName = () => `${CONFIG.boardPrefix}-${game.day}${game.pz.n !== CONFIG.size ? "-" + game.pz.n : ""}${game.fill !== CONFIG.fill ? "-f" + Math.round(game.fill * 100) : ""}`;
+const puzzleKey = (n) => `${dayKey()}.${n}${fillNow() !== CONFIG.fill ? "." + fillNow() : ""}`; // today's puzzle: day, size, and fill when live ops changed it
 function gridKey() { return `daily-puzzle.grid.${game.key}`; }
 function saveGrid() { if (game.mode === "daily" && !ATTRACT) try { localStorage.setItem(gridKey(), JSON.stringify({ cells: game.cells, start: game.start })); } catch {} }
 /** Today's puzzle (or a practice one): your grid comes back if you were part way through. */
 function startPuzzle(mode) {
   game.mode = mode; game.day = dayKey(); game.solvedMs = 0; game.start = 0; parts.length = 0;
   const n = sizeNow(), seed = mode === "daily" ? `${game.day}:${n}:${fillNow()}` : "practice" + Math.random();
-  game.key = `${game.day}.${n}`; game.pz = makePuzzle(seed, n, fillNow());
+  game.key = puzzleKey(n); game.fill = fillNow(); game.pz = makePuzzle(seed, n, fillNow());
   game.cells = Array.from({ length: n }, () => Array(n).fill(0));
   if (mode === "daily" && !ATTRACT) {
     const kept = parse((() => { try { return localStorage.getItem(gridKey()); } catch { return null; } })(), null);
@@ -373,8 +375,9 @@ function roster() {
   const now = Date.now(), out = [];
   for (const id of livePlayers()) {
     if (ATTRACT && id === net.sessionId) continue;
-    const p = S.entities.players[id] || {}, me = id === net.sessionId, pr = me ? { d: game.mode === "daily" ? game.day : "practice", p: progress(), st: game.start, t: game.solvedMs } : parse(p.prog, {});
-    out.push({ id, n: me ? (myName || "You") : p.n || "Player", c: me ? myColor : p.c || "#999", me, p: pr.d === game.day ? pr.p || 0 : 0, t: pr.d === game.day ? pr.t || 0 : 0, st: pr.st, note: pr.d === "practice" ? "practicing" : pr.d !== game.day ? "not started" : "" });
+    const p = S.entities.players[id] || {}, me = id === net.sessionId, pr = me ? { d: game.mode === "daily" ? game.day : "practice", p: progress(), st: game.start, t: game.solvedMs } : parse(p.prog, {}) || {};
+    const num = (v, hi) => Math.max(0, Math.min(hi, Math.floor(+v) || 0)); // another player's numbers go into HTML: numbers only
+    out.push({ id, n: me ? (myName || "You") : p.n || "Player", c: me ? myColor : p.c || "#999", me, p: pr.d === game.day ? num(pr.p, 100) : 0, t: pr.d === game.day ? num(pr.t, 864e5) : 0, st: num(pr.st, Date.now()), note: pr.d === "practice" ? "practicing" : pr.d !== game.day ? "not started" : "" });
   }
   for (const g of (ghosts() || { list: [] }).list) { const p = ghostProgress(g, now); out.push({ id: g.i, n: g.n, c: g.c, ghost: true, p, t: p >= 100 ? g.dur : 0, st: g.at }); }
   return out.sort((a, b) => (a.t && b.t ? a.t - b.t : a.t ? -1 : b.t ? 1 : b.p - a.p));
@@ -465,11 +468,11 @@ function fixColor() {
 (async function start() {
   net = await connect();
   net.onState((st) => { S = st; });
-  net.on("solved", (m, from) => { const p = S.entities.players[from]; if (m && p && !announced.has(from + game.day)) { announced.add(from + game.day); toast(`${p.n || "Someone"} solved it in ${fmt(m.t)}!`); } });
+  net.on("solved", (m, from) => { const p = S.entities.players[from]; if (m && p && +m.t >= 1000 && +m.t < 864e5 && !announced.has(from + game.day)) { announced.add(from + game.day); toast(`${p.n || "Someone"} solved it in ${fmt(m.t)}!`); } });
   net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
   net.onReconnect(() => { dropped = false; });
   // a live ops change of size or fill swaps in the new puzzle if you haven't started this one
-  net.onLive(() => { if (game.pz && !game.start && game.mode === "daily" && game.key !== `${dayKey()}.${sizeNow()}`) startPuzzle("daily"); hud(); });
+  net.onLive(() => { if (game.pz && !game.start && game.mode === "daily" && game.key !== puzzleKey(sizeNow())) startPuzzle("daily"); hud(); });
   if (!net.offline && typeof MP !== "undefined") player = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl });
   if (!ATTRACT) save = { ...save, ...(await store.load()) };
   const taken = new Set([...Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c), ...(ghosts()?.list || []).map((g) => g.c)]);

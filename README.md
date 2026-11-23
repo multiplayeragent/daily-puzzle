@@ -1,6 +1,6 @@
 # Daily Puzzle
 
-One new puzzle a day. Beat your friends’ time. A multiplayer starter game from [Multiplayer Agent](https://multiplayeragent.com): 2D, versus, 1+ players, with ghost solvers that race you when the room is quiet.
+One new puzzle a day. Beat your friends’ time. A multiplayer starter game from [Multiplayer Agent](https://multiplayeragent.com): 2D, versus, 1–30 players, with ghost solvers that race you when the room is quiet.
 
 ![Daily Puzzle](poster.jpg)
 
